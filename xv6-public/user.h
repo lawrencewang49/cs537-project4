@@ -1,5 +1,7 @@
 struct stat;
 struct rtcdate;
+struct pgdirinfo;
+struct wmapinfo;
 
 // system calls
 int fork(void);
@@ -23,11 +25,11 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-uint wmap(uint addr, int length, int flags, int fd);
-int wunmap(uint addr);
-uint wremap(uint oldaddr, int oldsize, int newsize, int flags);
-int getpgdirinfo(struct pgdirinfo *pdinfo);
-int getwmapinfo(struct wmapinfo *wminfo);
+uint wmap(uint, int, int, int);
+int wunmap(uint);
+uint wremap(uint, int, int, int);
+int getpgdirinfo(struct pgdirinfo*);
+int getwmapinfo(struct wmapinfo*);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -43,7 +43,7 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
 }
 
 int getpgdirinfo(struct pgdirinfo *pdinfo) {
-
+    
 }
 
 int getwmapinfo(struct wmapinfo *wminfo) {

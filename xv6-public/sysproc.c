@@ -92,6 +92,24 @@ sys_uptime(void)
 }
 
 int
+sys_wmap(void)
+{
+
+}
+
+int
+sys_wunmap(void)
+{
+  uint addr;
+}
+
+int
+sys_wremap(void)
+{
+
+}
+
+int
 sys_getpgdirinfo(void)
 {
   struct pgdirinfo* pdinfo;

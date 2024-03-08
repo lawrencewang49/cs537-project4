@@ -94,7 +94,12 @@ sys_uptime(void)
 int
 sys_wmap(void)
 {
-
+  uint addr;
+  int length, flags, fd;
+  if (argint(0, &length) < 0 || argint(0,  &flags) < 0 || fd < 0 || fd >= NOFILE) {
+    return FAILED;
+  }
+  return wmap(addr, length, flags, fd);
 }
 
 int

@@ -11,9 +11,6 @@
 #define FAILED -1
 #define SUCCESS 0
 
-// Page Size
-#define PAGE_SIZE 65536
-
 // for `getpgdirinfo`
 #define MAX_UPAGE_INFO 32
 struct pgdirinfo {

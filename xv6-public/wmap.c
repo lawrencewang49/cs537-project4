@@ -1,5 +1,12 @@
 #include "wmap.h"
 #include "types.h"
+#include "defs.h"
+#include "param.h"
+#include "memlayout.h"
+#include "mmu.h"
+#include "x86.h"
+#include "proc.h"
+#include "spinlock.h"
 
 struct mapping {
     uint addr;
@@ -16,7 +23,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
         return FAILED;
     }
     if (flags & MAP_FIXED) {
-        if ((addr < 0x60000000 || addr >= 0x80000000) || ((addr & (PAGE_SIZE - 1)) != 0)){
+        if ((addr < 0x60000000 || addr >= 0x80000000) || ((addr & (PGSIZE - 1)) != 0)){
             return FAILED;
         }
         for (int i = 0; i < MAX_WMMAP_INFO; i++) {
@@ -47,12 +54,10 @@ int wunmap(uint addr) {
             break; // Exit the loop once the mapping is found and handled
         }
     }
-    
     if (!found) {
         // No mapping found for the given address
         return FAILED;
     }
-    
     return SUCCESS;
 }
 
@@ -76,13 +81,14 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
 }
 
 int getwmapinfo(struct wmapinfo *wminfo) {
-    struct proc *curproc = myproc();
-    wminfo->total_mmaps = curproc->total_mmaps;
-    for (int i = 0; i < wminfo->total_mmaps; i++) {
+    // struct proc *curproc = myproc();
+    wminfo->total_mmaps = 0;
+    for (int i = 0; i < MAX_WMMAP_INFO; i++) {
         // Store the address, length, and number of loaded pages for each memory map
-        wminfo->addr[i] = curproc->wmaps[i].addr;
-        wminfo->length[i] = curproc->wmaps[i].length;
-        wminfo->n_loaded_pages[i] = curproc->wmaps[i].n_loaded_pages;
+        wminfo->total_mmaps++;
+        wminfo->addr[i] = mappings[i].addr;
+        wminfo->length[i] = mappings[i].length;
+        wminfo->n_loaded_pages[i] = PGROUNDUP(mappings[i].length);
     }
     return 0;
 }

@@ -71,13 +71,13 @@ trap(struct trapframe *tf)
     uartintr();
     lapiceoi();
     break;
-  case T_PGFLT:
-    if page fault addr is part of a mapping: // lazy allocation
-      // handle it
-    else:
-      cprintf("Segmentation Fault\n");
-      // kill the process
-      exit();
+  // case T_PGFLT:
+  //   if page fault addr is part of a mapping: // lazy allocation
+  //     // handle it
+  //   else:
+  //     cprintf("Segmentation Fault\n");
+  //     // kill the process
+  //     exit();
   case T_IRQ0 + 7:
   case T_IRQ0 + IRQ_SPURIOUS:
     cprintf("cpu%d: spurious interrupt at %x:%x\n",

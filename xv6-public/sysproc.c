@@ -105,7 +105,11 @@ sys_wmap(void)
 int
 sys_wunmap(void)
 {
-  return 0;
+  uint addr;
+  if (argint(0, (int *)&addr) < 0) {
+    return FAILED;
+  }
+  return wunmap(addr);
 }
 
 int

@@ -1,3 +1,4 @@
+#include "wmap.h"
 #include "types.h"
 #include "x86.h"
 #include "defs.h"
@@ -6,7 +7,6 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
-#include "wmap.h"
 
 int
 sys_fork(void)
@@ -96,7 +96,7 @@ sys_wmap(void)
 {
   uint addr;
   int length, flags, fd;
-  if (argint(0, &length) < 0 || argint(0,  &flags) < 0 || fd < 0 || fd >= NOFILE) {
+  if (argint(0, (int *)&addr) < 0 || argint(1, &length) < 0 || argint(2,  &flags) < 0 || argint(3, &fd) < 0 || argint(3, &fd) >= NOFILE) {
     return FAILED;
   }
   return wmap(addr, length, flags, fd);
@@ -105,13 +105,13 @@ sys_wmap(void)
 int
 sys_wunmap(void)
 {
-  uint addr;
+  return 0;
 }
 
 int
 sys_wremap(void)
 {
-
+  return 0;
 }
 
 int

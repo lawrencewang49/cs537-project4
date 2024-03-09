@@ -9,6 +9,8 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct wmapinfo;
+struct pgdirinfo;
 
 // bio.c
 void            binit(void);
@@ -185,6 +187,13 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+
+// wmap.c
+uint            wmap(uint, int, int, int);
+int             wunmap(uint);
+uint            wremap(uint, int, int, int);
+int             getpgdirinfo(struct pgdirinfo*);
+int             getwmapinfo(struct wmapinfo*);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

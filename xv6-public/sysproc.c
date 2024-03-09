@@ -1,4 +1,3 @@
-#include "wmap.h"
 #include "types.h"
 #include "x86.h"
 #include "defs.h"
@@ -7,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "wmap.h"
 
 int
 sys_fork(void)

@@ -18,23 +18,33 @@ uint wmap(uint addr, int length, int flags, int fd) {
     if (num_mappings >= MAX_WMMAP_INFO || length <= 0) {
         return FAILED;
     }
+    uint new_addr = 0x60000000;
     if (flags & MAP_FIXED) {
-        if ((addr < 0x60000000 || addr >= 0x80000000) || ((addr & (PGSIZE - 1)) != 0)){
+        if (addr < 0x60000000 || addr >= 0x80000000 || ((addr & (PGSIZE - 1)) != 0)) {
             return FAILED;
         }
-        for (int i = 0; i < MAX_WMMAP_INFO; i++) {
-            if (addr == mappings[i].addr) {
+        for (int i = 0; i < num_mappings; i++) {
+            uint mapping_end = mappings[i].addr + mappings[i].length;
+            if ((addr >= mappings[i].addr && addr < mapping_end) || (addr + length >= mappings[i].addr && addr + length < mapping_end)) {
                 return FAILED;
+            }
+        }
+        new_addr = addr;
+    } else {
+        for (int i = 0; i < num_mappings; i++) {
+            uint mapping_end = mappings[i].addr + mappings[i].length;
+            if ((new_addr >= mappings[i].addr && new_addr < mapping_end) || (new_addr + length >= mappings[i].addr && new_addr + length < mapping_end) || (mappings[i].addr >= new_addr && mappings[i].addr < new_addr + length) || (mapping_end >= new_addr && mapping_end < new_addr + length)) {
+                new_addr = PGROUNDDOWN(mapping_end) + PGSIZE;
             }
         }
     }
     struct mapping new_mapping;
-    new_mapping.addr = addr;
+    new_mapping.addr = new_addr;
     new_mapping.length = length;
     new_mapping.flags = flags;
     new_mapping.fd = fd;
     mappings[num_mappings++] = new_mapping;
-    return addr;
+    return new_mapping.addr;
 }
 
 int wunmap(uint addr) {
@@ -79,11 +89,14 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
 int getwmapinfo(struct wmapinfo *wminfo) {
     wminfo->total_mmaps = 0;
     for (int i = 0; i < num_mappings; i++) {
-        // Store the address, length, and number of loaded pages for each memory map
         wminfo->total_mmaps++;
         wminfo->addr[i] = mappings[i].addr;
         wminfo->length[i] = mappings[i].length;
-        wminfo->n_loaded_pages[i] = PGROUNDUP(mappings[i].length);
+        uint num_pages = mappings[i].length / PGSIZE;
+        if (mappings[i].length % PGSIZE != 0) {
+            num_pages++;
+        }
+        wminfo->n_loaded_pages[i] = num_pages;
     }
     return 0;
 }

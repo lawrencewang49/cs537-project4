@@ -77,23 +77,13 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
 }
 
 int getwmapinfo(struct wmapinfo *wminfo) {
-    // struct proc *curproc = myproc();
-    // wminfo->total_mmaps = 0;
-    // for (int i = 0; i < MAX_WMMAP_INFO; i++) {
-    //     // Store the address, length, and number of loaded pages for each memory map
-    //     wminfo->total_mmaps++;
-    //     wminfo->addr[i] = mappings[i].addr;
-    //     wminfo->length[i] = mappings[i].length;
-    //     wminfo->n_loaded_pages[i] = PGROUNDUP(mappings[i].length);
-    // }
-    struct proc *curproc = myproc();
     wminfo->total_mmaps = 0;
-    for (int i = 0; i < wminfo->total_mmaps; i++) {
+    for (int i = 0; i < num_mappings; i++) {
         // Store the address, length, and number of loaded pages for each memory map
-        wminfo->addr[i] = curproc->wmaps[i].addr;
-        wminfo->length[i] = curproc->wmaps[i].length;
-        wminfo->n_loaded_pages[i] = curproc->wmaps[i].n_loaded_pages;
         wminfo->total_mmaps++;
+        wminfo->addr[i] = mappings[i].addr;
+        wminfo->length[i] = mappings[i].length;
+        wminfo->n_loaded_pages[i] = PGROUNDUP(mappings[i].length);
     }
     return 0;
 }

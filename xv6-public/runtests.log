@@ -93,11 +93,11 @@ Checks the presence of all system calls
 
 **********************************************************************
 Running xv6 user progam /home/cs537-1/tests/P4/1_starter_tests/test_1.c
-DEBUG: cmd = ['/home/cs537-1/tests/P4/edit-makefile.sh', '/tmp/tmpjbqv9y6p/p/Makefile', '/tmp/tmpjbqv9y6p/p/Makefile.test']
+DEBUG: cmd = ['/home/cs537-1/tests/P4/edit-makefile.sh', '/tmp/tmpv880gt2i/p/Makefile', '/tmp/tmpv880gt2i/p/Makefile.test']
 Trying to build project using make
 make xv6.img fs.img
-/tmp/tmpjbqv9y6p/p/Makefile
-/tmp/tmpjbqv9y6p/p/Makefile.test
+/tmp/tmpv880gt2i/p/Makefile
+/tmp/tmpv880gt2i/p/Makefile.test
 make: 'xv6.img' is up to date.
 make: 'fs.img' is up to date.
 make qemu-nox CPUS=1
@@ -148,11 +148,11 @@ Validates the output of `getpgdirinfo()` before placing any mmap.
 
 **********************************************************************
 Running xv6 user progam /home/cs537-1/tests/P4/1_starter_tests/test_2.c
-DEBUG: cmd = ['/home/cs537-1/tests/P4/edit-makefile.sh', '/tmp/tmpjbqv9y6p/p/Makefile', '/tmp/tmpjbqv9y6p/p/Makefile.test']
+DEBUG: cmd = ['/home/cs537-1/tests/P4/edit-makefile.sh', '/tmp/tmpv880gt2i/p/Makefile', '/tmp/tmpv880gt2i/p/Makefile.test']
 Trying to build project using make
 make xv6.img fs.img
-/tmp/tmpjbqv9y6p/p/Makefile
-/tmp/tmpjbqv9y6p/p/Makefile.test
+/tmp/tmpv880gt2i/p/Makefile
+/tmp/tmpv880gt2i/p/Makefile.test
 make: 'xv6.img' is up to date.
 make: 'fs.img' is up to date.
 make qemu-nox CPUS=1
@@ -199,11 +199,11 @@ Validates the output of `getwmapinfo()` before placing any mmap.
 
 **********************************************************************
 Running xv6 user progam /home/cs537-1/tests/P4/1_starter_tests/test_3.c
-DEBUG: cmd = ['/home/cs537-1/tests/P4/edit-makefile.sh', '/tmp/tmpjbqv9y6p/p/Makefile', '/tmp/tmpjbqv9y6p/p/Makefile.test']
+DEBUG: cmd = ['/home/cs537-1/tests/P4/edit-makefile.sh', '/tmp/tmpv880gt2i/p/Makefile', '/tmp/tmpv880gt2i/p/Makefile.test']
 Trying to build project using make
 make xv6.img fs.img
-/tmp/tmpjbqv9y6p/p/Makefile
-/tmp/tmpjbqv9y6p/p/Makefile.test
+/tmp/tmpv880gt2i/p/Makefile
+/tmp/tmpv880gt2i/p/Makefile.test
 make: 'xv6.img' is up to date.
 make: 'fs.img' is up to date.
 make qemu-nox CPUS=1
@@ -232,13 +232,13 @@ tester
 
 
 TEST_3
-Cause: expected 0 maps, but found 16
+Initially 0 maps. 	Okay.
 
-WMMAP	 FAILED
+WMMAP	 SUCCESS
 
-test test_3 FAILED (0 of 1)
+
+test test_3 PASSED (1 of 1)
  (Validates the output of `getwmapinfo()` before placing any mmap.)
- tester failed
 
 **********************************************************************
 Summary:
@@ -251,10 +251,9 @@ test test_1 PASSED (1 of 1)
 test test_2 PASSED (1 of 1)
  (Validates the output of `getpgdirinfo()` before placing any mmap.)
 
-test test_3 FAILED (0 of 1)
+test test_3 PASSED (1 of 1)
  (Validates the output of `getwmapinfo()` before placing any mmap.)
- tester failed
 
-Passed 3 of 4 tests.
-Overall 3 of 4
-Points 2 of 3
+Passed 4 of 4 tests.
+Overall 4 of 4
+Points 3 of 3

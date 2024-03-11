@@ -8,37 +8,26 @@
 #include "fs.h"
 #include "file.h"
 
-struct mapping {
-    uint addr;
-    int length; 
-    int flags;
-    int fd;
-};
-
-struct mapping mappings[MAX_WMMAP_INFO];
-int num_mappings = 0;
-
 uint wmap(uint addr, int length, int flags, int fd) {
+    struct proc *curproc = myproc();
     // Have we reached the max number of mappings?
     // Is the length that the user provides > 0?
-    if (num_mappings >= MAX_WMMAP_INFO || length <= 0) {
+    if (curproc->num_mappings >= MAX_WMMAP_INFO || length <= 0 || ((curproc->mappings->flags & MAP_PRIVATE) && (curproc->mappings->flags & MAP_SHARED))) {
         return FAILED;
     }
-
     uint new_addr = 0x60000000;
     if (flags & MAP_FIXED) { // Consider case of fixed addr
         // Check that addr fits within WMAP space + is page aligned
         if (addr < 0x60000000 || addr >= 0x80000000 || addr % PGSIZE != 0) {
             return FAILED;
         }
-
         // Iterate through mappings to find appropriate region to insert new region
-        for (int i = 0; i < num_mappings; i++) {
-            uint mapping_end = mappings[i].addr + (uint) mappings[i].length;
+        for (int i = 0; i < curproc->num_mappings; i++) {
+            uint mapping_end = curproc->mappings[i].addr + (uint) curproc->mappings[i].length;
             if (
-                (addr >= mappings[i].addr && addr < mapping_end) || // Does the start of the region overlap with current region
-                (addr + (uint) length >= mappings[i].addr && addr + (uint) length < mapping_end)||
-                (mappings[i].addr >= addr && mappings[i].addr < addr + (uint) length) || 
+                (addr >= curproc->mappings[i].addr && addr < mapping_end) || // Does the start of the region overlap with current region
+                (addr + (uint) length >= curproc->mappings[i].addr && addr + (uint) length < mapping_end)||
+                (curproc->mappings[i].addr >= addr && curproc->mappings[i].addr < addr + (uint) length) || 
                 (mapping_end >= addr && mapping_end < addr + (uint) length)
             ) {
                 return FAILED;
@@ -46,9 +35,9 @@ uint wmap(uint addr, int length, int flags, int fd) {
         }
         new_addr = addr;
     } else {
-        for (int i = 0; i < num_mappings; i++) {
-            uint mapping_end = mappings[i].addr + (uint) mappings[i].length;
-            if ((new_addr >= mappings[i].addr && new_addr < mapping_end) || (new_addr + (uint) length >= mappings[i].addr && new_addr + (uint) length < mapping_end) || (mappings[i].addr >= new_addr && mappings[i].addr < new_addr + (uint) length) || (mapping_end >= new_addr && mapping_end < new_addr + (uint) length)) {
+        for (int i = 0; i < curproc->num_mappings; i++) {
+            uint mapping_end = curproc->mappings[i].addr + (uint) curproc->mappings[i].length;
+            if ((new_addr >= curproc->mappings[i].addr && new_addr < mapping_end) || (new_addr + (uint) length >= curproc->mappings[i].addr && new_addr + (uint) length < mapping_end) || (curproc->mappings[i].addr >= new_addr && curproc->mappings[i].addr < new_addr + (uint) length) || (mapping_end >= new_addr && mapping_end < new_addr + (uint) length)) {
                 new_addr = PGROUNDUP(mapping_end);
             }
         }
@@ -58,20 +47,21 @@ uint wmap(uint addr, int length, int flags, int fd) {
     new_mapping.length = length;
     new_mapping.flags = flags;
     new_mapping.fd = fd;
-    mappings[num_mappings++] = new_mapping;
+    curproc->mappings[curproc->num_mappings++] = new_mapping;
     return new_mapping.addr;
 }
 
 int wunmap(uint addr) {
+    struct proc *curproc = myproc();
     int found = 0;
-    for (int i = 0; i < num_mappings; i++) {
-        if (mappings[i].addr == addr) {
+    for (int i = 0; i < curproc->num_mappings; i++) {
+        if (curproc->mappings[i].addr == addr) {
             found = 1;
             // Shift all subsequent mappings one position towards the start
-            for (int j = i; j < num_mappings - 1; j++) {
-                mappings[j] = mappings[j + 1];
+            for (int j = i; j < curproc->num_mappings - 1; j++) {
+                curproc->mappings[j] = curproc->mappings[j + 1];
             }
-            num_mappings--; // Decrease the total number of mappings
+            curproc->num_mappings--; // Decrease the total number of mappings
             break; // Exit the loop once the mapping is found and handled
         }
     }
@@ -93,15 +83,15 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
     }
     pde_t *curr_pgdir = curproc->pgdir;
     pte_t *pte;
-    uint va = 0x60000000;
+    uint va = 0;
     int user_allocated_pages = 0;
     pdinfo->n_upages = 0;
     // cprintf("n_upages: %d\n", pdinfo->n_upages);
     cprintf("1\n");
     while (user_allocated_pages < MAX_UPAGE_INFO && va < KERNBASE) {
         pte = walkpgdir(curr_pgdir, (void*)va, 0);
-        cprintf("%d, %d\n", *pte, (*pte & PTE_U));
         if (pte && (*pte & PTE_U)) {
+            cprintf("0x%x, %x\n", va, (*pte));
             cprintf("enters if statement\n");
             pdinfo->n_upages++;
             cprintf("user pages %d\n", pdinfo->n_upages);
@@ -120,16 +110,16 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
 }
 
 int getwmapinfo(struct wmapinfo *wminfo) {
-    wminfo->total_mmaps = 0;
-    for (int i = 0; i < num_mappings; i++) {
+    struct proc *curproc = myproc();
+    for (int i = 0; i < curproc->num_mappings; i++) {
         wminfo->total_mmaps++;
         //cprintf("%d\n", wminfo->total_mmaps);
-        wminfo->addr[i] = mappings[i].addr;
+        wminfo->addr[i] = curproc->mappings[i].addr;
         //cprintf("0x%x\n", wminfo->addr[i]);
-        wminfo->length[i] = mappings[i].length;
+        wminfo->length[i] = curproc->mappings[i].length;
         //cprintf("%d\n", wminfo->length[i]);
-        uint num_pages = mappings[i].length / PGSIZE;
-        if (mappings[i].length % PGSIZE != 0) {
+        uint num_pages = curproc->mappings[i].length / PGSIZE;
+        if (curproc->mappings[i].length % PGSIZE != 0) {
             num_pages++;
         }
         wminfo->n_loaded_pages[i] = num_pages;
@@ -139,15 +129,16 @@ int getwmapinfo(struct wmapinfo *wminfo) {
 }
 
 int handle_pagefault(uint addr) {
-    for (int i = 0; i < num_mappings; i++) {
-        if (addr >= mappings[i].addr && addr < mappings[i].addr + mappings[i].length) {
+    struct proc *curproc = myproc();
+    for (int i = 0; i < curproc->num_mappings; i++) {
+        if (addr >= curproc->mappings[i].addr && addr < curproc->mappings[i].addr + curproc->mappings[i].length) {
             struct proc *curr_proc = myproc();
             char *mem = kalloc();
             int success;
             if (mem == 0) {
                 return 0;
             }
-            if (mappings[i].flags & MAP_ANONYMOUS) {
+            if (curproc->mappings[i].flags & MAP_ANONYMOUS) {
                 success = mappages(curr_proc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
                 if (success != 0) {
                     kfree(mem);
@@ -158,9 +149,9 @@ int handle_pagefault(uint addr) {
                 }
             } else {
                 // file-backed mapping
-                struct file *f = curr_proc->ofile[mappings[i].fd];
+                struct file *f = curr_proc->ofile[curproc->mappings[i].fd];
                 ilock(f->ip);
-                readi(f->ip, mem, addr - mappings[i].addr, PGSIZE);
+                readi(f->ip, mem, addr - curproc->mappings[i].addr, PGSIZE);
                 iunlock(f->ip);
                 success = mappages(curr_proc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
                 if (success != 0) {

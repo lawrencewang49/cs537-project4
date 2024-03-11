@@ -73,8 +73,9 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-    uint failed_addr = rcr2();
+    uint failed_addr = PGROUNDDOWN(rcr2());
     if (handle_pagefault(failed_addr)) {
+      // cprintf("n_pages: %d\n", (myproc()->sz / PGSIZE) + (myproc()->sz % PGSIZE != 0));
       break;
     } else {
       cprintf("Segmentation Fault\n");

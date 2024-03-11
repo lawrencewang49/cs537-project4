@@ -3,6 +3,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "defs.h"
+#include "memlayout.h"
 
 struct mapping {
     uint addr;
@@ -25,7 +26,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
         }
         for (int i = 0; i < num_mappings; i++) {
             uint mapping_end = mappings[i].addr + mappings[i].length;
-            if ((addr >= mappings[i].addr && addr < mapping_end) || (addr + length >= mappings[i].addr && addr + length < mapping_end)) {
+            if ((addr >= mappings[i].addr && addr < mapping_end) || (addr + length >= mappings[i].addr && addr + length < mapping_end) || (mappings[i].addr >= addr && mappings[i].addr < addr + length) || (mapping_end >= addr && mapping_end < addr + length)) {
                 return FAILED;
             }
         }
@@ -73,17 +74,25 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
 
 int getpgdirinfo(struct pgdirinfo *pdinfo) {
     struct proc *curproc = myproc();
-    pdinfo->n_upages = 0;
-    for (int i = 0; i < MAX_UPAGE_INFO && i < curproc->sz; i += PGSIZE) {
-        // If the page is a user page
-        if (curproc->pgdir[i / PGSIZE] & PTE_U) { 
-            // Store the virtual and physical addresses of the page
-            pdinfo->va[pdinfo->n_upages] = i;
-            pdinfo->pa[pdinfo->n_upages] = PTE_ADDR(curproc->pgdir[i / PGSIZE]);
-            pdinfo->n_upages++;
-        }
+    if (curproc == 0) {
+        return FAILED;
     }
-    return 0;
+    pdinfo->n_upages = 0;
+    pde_t *curr_pgdir = curproc->pgdir;
+    pte_t *pte;
+    uint va = 0x60000000;
+    int pdinfo_ind = 0;
+    for (int i = 0; i < MAX_UPAGE_INFO; i++) {
+        pte = walkpgdir(curr_pgdir, (void*)va, 0);
+        if (pte && (*pte & PTE_U)) {
+            pdinfo->n_upages++;
+            pdinfo->va[pdinfo_ind] = va;
+            pdinfo->pa[pdinfo_ind] = V2P(*pte);
+            pdinfo_ind++;
+        }
+        va += PGSIZE;
+    }
+    return SUCCESS;
 }
 
 int getwmapinfo(struct wmapinfo *wminfo) {
@@ -98,6 +107,25 @@ int getwmapinfo(struct wmapinfo *wminfo) {
         }
         wminfo->n_loaded_pages[i] = num_pages;
     }
-    return 0;
+    return SUCCESS;
 }
 
+int handle_pagefault(uint addr) {
+    for (int i = 0; i < num_mappings; i++) {
+        if (addr >= mappings[i].addr || addr < mappings[i].addr + mappings[i].length) {
+            struct proc *curr_proc = myproc();
+            char *mem = kalloc();
+            if (mem == 0) {
+                return 0;
+            }
+            int success = mappages(curr_proc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+            if (success != 0) {
+                kfree(mem);
+                return 0;
+            } else {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}

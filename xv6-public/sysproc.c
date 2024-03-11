@@ -7,7 +7,6 @@
 #include "mmu.h"
 #include "proc.h"
 #include "wmap.h"
-
 int
 sys_fork(void)
 {

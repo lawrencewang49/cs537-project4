@@ -1,8 +1,8 @@
 #include "types.h"
 struct stat;
 struct rtcdate;
-struct pgdirinfo;
 struct wmapinfo;
+struct pgdirinfo;
 
 // system calls
 int fork(void);

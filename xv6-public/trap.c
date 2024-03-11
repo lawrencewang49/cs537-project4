@@ -7,6 +7,7 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
+#include "wmap.h"
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
@@ -71,13 +72,15 @@ trap(struct trapframe *tf)
     uartintr();
     lapiceoi();
     break;
-  // case T_PGFLT:
-  //   if page fault addr is part of a mapping: // lazy allocation
-  //     // handle it
-  //   else:
-  //     cprintf("Segmentation Fault\n");
-  //     // kill the process
-  //     exit();
+  case T_PGFLT:
+    uint failed_addr = rcr2();
+    if (handle_pagefault(failed_addr)) {
+      break;
+    } else {
+      cprintf("Segmentation Fault\n");
+      // kill the process
+      exit();
+    }
   case T_IRQ0 + 7:
   case T_IRQ0 + IRQ_SPURIOUS:
     cprintf("cpu%d: spurious interrupt at %x:%x\n",

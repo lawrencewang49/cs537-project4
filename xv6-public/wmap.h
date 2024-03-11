@@ -1,3 +1,5 @@
+#ifndef WMAP_H
+#define WMAP_H
 #include "types.h"
 // Flags for wmap
 #define MAP_PRIVATE 0x0001
@@ -27,3 +29,5 @@ struct wmapinfo {
     int length[MAX_WMMAP_INFO];         // Size of mapping
     int n_loaded_pages[MAX_WMMAP_INFO]; // Number of pages physically loaded into memory
 };
+
+#endif

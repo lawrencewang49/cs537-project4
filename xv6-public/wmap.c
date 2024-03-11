@@ -88,7 +88,7 @@ int wunmap(uint addr) {
             if (shared && !anon) {
                 struct file *f = curproc->ofile[curproc->mappings[i].fd];
                 f->off = 0;
-                if (filewrite(f, (char *) start, PGSIZE) < 0){
+                if (filewrite(f, (char *) start, curproc->mappings[i].length) < 0){
                     cprintf("filewrite failed\n");
                     return FAILED; 
                 }

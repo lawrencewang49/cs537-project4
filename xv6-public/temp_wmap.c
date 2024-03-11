@@ -101,7 +101,9 @@ void unmappages(pde_t *pgdir, uint va, uint size, struct mem_mapping *mapping) {
 
 int deleteMapping(uint addr) {
     struct proc *currproc = myproc();
-
+    if (addr % PGSIZE != 0) {
+        return FAILED;
+    }
     int found = 0;
     int i;
     for (i = 0; i < currproc->num_mappings; i++) {

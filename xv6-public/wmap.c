@@ -54,20 +54,30 @@ uint wmap(uint addr, int length, int flags, int fd) {
 
 int wunmap(uint addr) {
     struct proc *curproc = myproc();
+    if (addr % PGSIZE != 0) {
+        return FAILED;
+    }
     int found = 0;
     for (int i = 0; i < curproc->num_mappings; i++) {
         if (curproc->mappings[i].addr == addr) {
             found = 1;
+            uint end = PGROUNDUP(curproc->mappings[i].addr);
+            for (uint start = curproc->mappings[i].addr; start < end; start += PGSIZE) {
+                pte_t *pte = walkpgdir(curproc->pgdir, (void *)addr, 0);
+                if (pte && (*pte & PTE_P) != 0) {
+                    kfree(P2V(PTE_ADDR(*pte)));
+                    *pte = 0;
+                }
+            }   
             // Shift all subsequent mappings one position towards the start
             for (int j = i; j < curproc->num_mappings - 1; j++) {
                 curproc->mappings[j] = curproc->mappings[j + 1];
             }
-            curproc->num_mappings--; // Decrease the total number of mappings
-            break; // Exit the loop once the mapping is found and handled
+            curproc->num_mappings--;
+            break;
         }
     }
     if (!found) {
-        // No mapping found for the given address
         return FAILED;
     }
     return SUCCESS;

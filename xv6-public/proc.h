@@ -41,6 +41,7 @@ struct mapping {
   int length; 
   int flags;
   int fd;
+  int num_pages_loaded;
 };
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };

@@ -47,6 +47,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
     new_mapping.length = length;
     new_mapping.flags = flags;
     new_mapping.fd = fd;
+    new_mapping.num_pages_loaded = 0;
     curproc->mappings[curproc->num_mappings++] = new_mapping;
     return new_mapping.addr;
 }
@@ -86,7 +87,6 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
     uint va = 0;
     int user_allocated_pages = 0;
     pdinfo->n_upages = 0;
-    // cprintf("n_upages: %d\n", pdinfo->n_upages);
     cprintf("1\n");
     while (user_allocated_pages < MAX_UPAGE_INFO && va < KERNBASE) {
         pte = walkpgdir(curr_pgdir, (void*)va, 0);
@@ -96,12 +96,8 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
             pdinfo->n_upages++;
             cprintf("user pages %d\n", pdinfo->n_upages);
             pdinfo->va[user_allocated_pages] = va;
-            //cprintf("0x%x\n", pdinfo->va[user_allocated_pages]);
             pdinfo->pa[user_allocated_pages] = PTE_ADDR(*pte);
-            //cprintf("0x%x\n", pdinfo->pa[user_allocated_pages]);
-            // cprintf("pa: %x, va: %x\n", pdinfo->pa[user_allocated_pages], pdinfo->va[user_allocated_pages]);
             user_allocated_pages++;
-            //cprintf("%d\n", user_allocated_pages);
         }
         va += PGSIZE;
     }
@@ -111,19 +107,11 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
 
 int getwmapinfo(struct wmapinfo *wminfo) {
     struct proc *curproc = myproc();
+    wminfo->total_mmaps = curproc->num_mappings;
     for (int i = 0; i < curproc->num_mappings; i++) {
-        wminfo->total_mmaps++;
-        //cprintf("%d\n", wminfo->total_mmaps);
         wminfo->addr[i] = curproc->mappings[i].addr;
-        //cprintf("0x%x\n", wminfo->addr[i]);
         wminfo->length[i] = curproc->mappings[i].length;
-        //cprintf("%d\n", wminfo->length[i]);
-        uint num_pages = curproc->mappings[i].length / PGSIZE;
-        if (curproc->mappings[i].length % PGSIZE != 0) {
-            num_pages++;
-        }
-        wminfo->n_loaded_pages[i] = num_pages;
-        //cprintf("%d\n", num_pages);
+        wminfo->n_loaded_pages[i] = curproc->mappings[i].num_pages_loaded;
     }
     return SUCCESS;
 }
@@ -138,13 +126,14 @@ int handle_pagefault(uint addr) {
             if (mem == 0) {
                 return 0;
             }
+            curproc->mappings[i].num_pages_loaded++;
             if (curproc->mappings[i].flags & MAP_ANONYMOUS) {
                 success = mappages(curr_proc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
                 if (success != 0) {
                     kfree(mem);
                     return 0;
                 } else {
-                    // cprintf("This was mapped anonymously\n");
+                    memset(mem, 0, PGSIZE);
                     return 1;
                 }
             } else {
@@ -158,7 +147,6 @@ int handle_pagefault(uint addr) {
                     kfree(mem);
                     return 0;
                 } else {
-                    // cprintf("This was mapped w/ file backed\n");
                     return 1;
                 }
             }

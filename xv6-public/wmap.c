@@ -79,7 +79,7 @@ int wunmap(uint addr) {
     int found = 0;
     for (int i = 0; i < curproc->num_mappings; i++) {
         if (curproc->mappings[i].addr == addr) {
-            uint start = curproc->mappings[i].addr;
+            uint start = PGROUNDDOWN(curproc->mappings[i].addr);
             uint end = PGROUNDUP(curproc->mappings[i].addr + curproc->mappings[i].length);
             found = 1;
             uint anon = curproc->mappings[i].flags & MAP_ANONYMOUS;
@@ -93,19 +93,17 @@ int wunmap(uint addr) {
                     return FAILED; 
                 }
             }
-            for (uint start = curproc->mappings[i].addr; start < end; start += PGSIZE) {
-                pte_t *pte = walkpgdir(curproc->pgdir, (void *)addr, 0);
-                if (pte && (*pte & PTE_P) != 0) {
+            for (uint start_addr = start; start_addr < end; start_addr += PGSIZE) {
+                pte_t *pte = walkpgdir(curproc->pgdir, (void *)start_addr, 0);
+                if (pte && (*pte & PTE_P)) {
                     kfree(P2V(PTE_ADDR(*pte)));
-                    *pte = *pte & ~PTE_P;
+                    *pte = 0;
                 }
             }
             // Shift all subsequent mappings one position towards the start
-            for (int j = i; j < curproc->num_mappings - 1; j++) {
+            for (int j = i; j < curproc->num_mappings; j++) {
                 curproc->mappings[j] = curproc->mappings[j + 1];
             }
-            curproc->mappings[i].addr -= PGSIZE;
-            curproc->mappings[i].length -= PGSIZE;
             curproc->num_mappings--;
             break;
         }
@@ -130,21 +128,21 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
     uint va = 0;
     int user_allocated_pages = 0;
     pdinfo->n_upages = 0;
-    cprintf("1\n");
+    // cprintf("1\n");
     while (user_allocated_pages < MAX_UPAGE_INFO && va < KERNBASE) {
         pte = walkpgdir(curr_pgdir, (void*)va, 0);
         if (pte && (*pte & PTE_U)) {
-            cprintf("0x%x, %x\n", va, (*pte));
-            cprintf("enters if statement\n");
+            // cprintf("0x%x, %x\n", va, (*pte));
+            // cprintf("enters if statement\n");
             pdinfo->n_upages++;
-            cprintf("user pages %d\n", pdinfo->n_upages);
+            // cprintf("user pages %d\n", pdinfo->n_upages);
             pdinfo->va[user_allocated_pages] = va;
             pdinfo->pa[user_allocated_pages] = PTE_ADDR(*pte);
             user_allocated_pages++;
         }
         va += PGSIZE;
     }
-    cprintf("2\n");
+    // cprintf("2\n");
     return SUCCESS;
 }
 

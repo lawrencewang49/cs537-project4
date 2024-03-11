@@ -8,6 +8,24 @@
 #include "fs.h"
 #include "file.h"
 
+void selectionSort(struct mapping arr[], int n) {
+    int i, j, minIndex;
+    struct mapping temp;
+    for (i = 0; i < n - 1; i++) {
+        minIndex = i;
+        for (j = i + 1; j < n; j++) {
+            // Compare based on the 'addr' field
+            if (arr[j].addr < arr[minIndex].addr) {
+                minIndex = j;
+            }
+        }
+        // Swap arr[i] and arr[minIndex]
+        temp = arr[i];
+        arr[i] = arr[minIndex];
+        arr[minIndex] = temp;
+    }
+}
+
 uint wmap(uint addr, int length, int flags, int fd) {
     struct proc *curproc = myproc();
     // Have we reached the max number of mappings?
@@ -49,6 +67,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
     new_mapping.fd = fd;
     new_mapping.num_pages_loaded = 0;
     curproc->mappings[curproc->num_mappings++] = new_mapping;
+    selectionSort(curproc->mappings, curproc->num_mappings);
     return new_mapping.addr;
 }
 
@@ -60,19 +79,33 @@ int wunmap(uint addr) {
     int found = 0;
     for (int i = 0; i < curproc->num_mappings; i++) {
         if (curproc->mappings[i].addr == addr) {
+            uint start = curproc->mappings[i].addr;
+            uint end = PGROUNDUP(curproc->mappings[i].addr + curproc->mappings[i].length);
             found = 1;
-            uint end = PGROUNDUP(curproc->mappings[i].addr);
+            uint anon = curproc->mappings[i].flags & MAP_ANONYMOUS;
+            uint shared = curproc->mappings[i].flags & MAP_SHARED;
+            // Check for file backing
+            if (shared && !anon) {
+                struct file *f = curproc->ofile[curproc->mappings[i].fd];
+                f->off = 0;
+                if (filewrite(f, (char *) start, PGSIZE) < 0){
+                    cprintf("filewrite failed\n");
+                    return FAILED; 
+                }
+            }
             for (uint start = curproc->mappings[i].addr; start < end; start += PGSIZE) {
                 pte_t *pte = walkpgdir(curproc->pgdir, (void *)addr, 0);
                 if (pte && (*pte & PTE_P) != 0) {
                     kfree(P2V(PTE_ADDR(*pte)));
-                    *pte = 0;
+                    *pte = *pte & ~PTE_P;
                 }
-            }   
+            }
             // Shift all subsequent mappings one position towards the start
             for (int j = i; j < curproc->num_mappings - 1; j++) {
                 curproc->mappings[j] = curproc->mappings[j + 1];
             }
+            curproc->mappings[i].addr -= PGSIZE;
+            curproc->mappings[i].length -= PGSIZE;
             curproc->num_mappings--;
             break;
         }
@@ -130,7 +163,6 @@ int handle_pagefault(uint addr) {
     struct proc *curproc = myproc();
     for (int i = 0; i < curproc->num_mappings; i++) {
         if (addr >= curproc->mappings[i].addr && addr < curproc->mappings[i].addr + curproc->mappings[i].length) {
-            struct proc *curr_proc = myproc();
             char *mem = kalloc();
             int success;
             if (mem == 0) {
@@ -138,7 +170,7 @@ int handle_pagefault(uint addr) {
             }
             curproc->mappings[i].num_pages_loaded++;
             if (curproc->mappings[i].flags & MAP_ANONYMOUS) {
-                success = mappages(curr_proc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+                success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
                 if (success != 0) {
                     kfree(mem);
                     return 0;
@@ -148,11 +180,11 @@ int handle_pagefault(uint addr) {
                 }
             } else {
                 // file-backed mapping
-                struct file *f = curr_proc->ofile[curproc->mappings[i].fd];
+                struct file *f = curproc->ofile[curproc->mappings[i].fd];
                 ilock(f->ip);
                 readi(f->ip, mem, addr - curproc->mappings[i].addr, PGSIZE);
                 iunlock(f->ip);
-                success = mappages(curr_proc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+                success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
                 if (success != 0) {
                     kfree(mem);
                     return 0;

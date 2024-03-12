@@ -198,6 +198,28 @@ fork(void)
     return -1;
   }
 
+  np->sz = curproc->sz;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  pid = np->pid;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+
+  release(&ptable.lock);
+
   // Initialize the success flag
   int success = 1;
   // Copy the number of mappings
@@ -227,14 +249,14 @@ fork(void)
             success = 0;
             break;
           }
-          if (mappages(np->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
+          if (mappages(np->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_U | PTE_W) < 0) {
             success = 0;
             break;
           }
           // page info
           memmove(mem, (char *)addr, PGSIZE);
-        } else if (cur_map.flags & MAP_SHARED) { // else shared, simply move pages over
-          if (mappages(np->pgdir, (void *)addr, PGSIZE, PTE_ADDR(*pte), PTE_W | PTE_U) < 0) {
+        } else { // else shared, simply move pages over
+          if (mappages(np->pgdir, (void *)addr, PGSIZE, PTE_ADDR(*pte), PTE_U | PTE_W) < 0) {
             success = 0;
             break;
           }
@@ -247,27 +269,6 @@ fork(void)
     return FAILED;
   }
   lcr3(V2P(np->pgdir));
-  np->sz = curproc->sz;
-  np->parent = curproc;
-  *np->tf = *curproc->tf;
-
-  // Clear %eax so that fork returns 0 in the child.
-  np->tf->eax = 0;
-
-  for(i = 0; i < NOFILE; i++)
-    if(curproc->ofile[i])
-      np->ofile[i] = filedup(curproc->ofile[i]);
-  np->cwd = idup(curproc->cwd);
-
-  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
-
-  pid = np->pid;
-
-  acquire(&ptable.lock);
-
-  np->state = RUNNABLE;
-
-  release(&ptable.lock);
 
   return pid;
 }

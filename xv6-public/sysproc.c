@@ -114,7 +114,12 @@ sys_wunmap(void)
 int
 sys_wremap(void)
 {
-  return 0;
+  uint oldaddr;
+  int oldsize, newsize, flags;
+  if (argint(0, (int *)&oldaddr) < 0 || argint(1, &oldsize) < 0 || argint(2, &newsize) < 0 || argint(3, &flags) < 0) {
+    return FAILED;
+  }
+  return wremap(oldaddr, oldsize, newsize, flags);
 }
 
 int

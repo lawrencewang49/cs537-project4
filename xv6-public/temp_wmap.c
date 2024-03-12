@@ -80,56 +80,81 @@ void insertMapping(struct mem_mapping *mapping) {
     currproc -> num_mappings++;
 }
 
-void unmappages(pde_t *pgdir, uint va, uint size, struct mem_mapping *mapping) {
-    uint start = PGROUNDDOWN(va);
-    uint end = PGROUNDUP(va + size);
+void unmap_page(pde_t *pgdir, uint va, struct mem_mapping *mapping) {
+   
+    // delete the pte
+    pte_t *pte = walkpgdir(pgdir, (void *)va, 0);
 
-    for (uint addr = start; addr < end; addr += PGSIZE) {
-        pte_t *pte = walkpgdir(pgdir, (void *)addr, 0);
-        if (pte && (*pte & PTE_P) != 0) {
-            uint physical_addr = PTE_ADDR(*pte);
-            kfree(P2V(physical_addr));
-            *pte = 0;
-        }
+    if (pte == 0 || !(*pte & PTE_P)) {
+        return;
     }
 
-    // Optionally, you can write back to file if needed
-    // if (!(mapping->flags & MAP_ANONYMOUS)) {
-    //     // Write back to file logic
-    // }
+    if(!(mapping->flags & MAP_ANONYMOUS) && !(mapping->flags & MAP_PRIVATE)) {
+        struct file *file = myproc()->ofile[mapping->fd];
+        if (file == 0) {
+            return; // File descriptor is not valid
+        }
+
+        file->off = va - mapping->addr;
+        // calculate number of bytes to write, max is PGSIZE
+        int n_bytes = mapping->addr + mapping->length - va;
+        if (n_bytes > PGSIZE) {
+            n_bytes = PGSIZE;
+        }
+        if (filewrite(file, (char *)va, n_bytes) < 0){
+            panic("unmap_page: filewrite failed\n");
+            return; // Unable to write to file
+        }
+    }
+    kfree((char *)P2V(PTE_ADDR(*pte)));
+    *pte = 0;
+    cprintf("unmap_page: va: %x\n", va);
+    
 }
 
 int deleteMapping(uint addr) {
+    cprintf("deleteMapping: addr: %x\n", addr);
+
     struct proc *currproc = myproc();
-    if (addr % PGSIZE != 0) {
-        return FAILED;
-    }
+
     int found = 0;
     int i;
-    for (i = 0; i < currproc->num_mappings; i++) {
-        struct mem_mapping *mapping = &(currproc->mappings[i]);
-        if (mapping->valid && mapping->addr == addr) {
+    for( i = 0; i < currproc -> num_mappings; i++) {
+        struct mem_mapping *mapping = &(currproc -> mappings[i]);
+        if(mapping->valid && mapping->addr == addr) {
             found = 1;
             break;
         }
     }
 
-    if (found) {
-        unmappages(currproc->pgdir, currproc->mappings[i].addr, currproc->mappings[i].length, &(currproc->mappings[i]));
+    if(found){
+        //Shift left
 
-        for (int j = i; j < currproc->num_mappings - 1; j++) {
-            currproc->mappings[j] = currproc->mappings[j + 1];
+        int initAddr = currproc -> mappings[i].addr;
+
+        while(initAddr < currproc -> mappings[i].addr+currproc -> mappings[i].length){
+            pde_t *pte = currproc -> pgdir;
+
+            unmap_page(pte, initAddr, &(currproc -> mappings[i]));
+
+            initAddr = initAddr + PGSIZE;
         }
-        currproc->num_mappings--;
+
+
+        for(int j = i; j < currproc -> num_mappings - 1; j++){
+            currproc -> mappings[j] = currproc -> mappings[j+1];
+        }
+        currproc -> num_mappings--;
 
         return 0;
     }
+    
 
     return -1;
 }
 
 uint wmap(uint addr, int length, int flags, int fd) {
-    cprintf("wmap: addr: %x, length: %d, flags: %d, fd: %d\n", addr, length, flags, fd);
+    /*
     if(flags & MAP_FIXED)
         cprintf("wmap: MAP_FIXED\n");
     if(flags & MAP_SHARED)
@@ -138,6 +163,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
         cprintf("wmap: MAP_PRIVATE\n");
     if(flags & MAP_ANONYMOUS)
         cprintf("wmap: MAP_ANONYMOUS\n");
+    */
 
     if(length <= 0){
        return FAILED;
@@ -153,6 +179,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
         }
         addr = getValidAddress(length);
     }
+    cprintf("wmap: addr: %x, length: %d, flags: %d, fd: %d\n", addr, length, flags, fd);
 
     struct mem_mapping mapping;
     mapping.addr = addr;
@@ -164,12 +191,10 @@ uint wmap(uint addr, int length, int flags, int fd) {
 
     insertMapping(&mapping);
     
-    cprintf("wmap: addr: %x, length: %d, flags: %d, fd: %d\n", addr, length, flags, fd);
     return addr;
 }
 
 int allocatePage(uint addr, struct mem_mapping *mapping) {
-    cprintf("allocatePage: addr: %x, mapping: %x\n", addr, mapping);
     char *mem = kalloc();
     if (mem == 0) {
         cprintf("allocatePage: mem is 0\n");
@@ -178,6 +203,7 @@ int allocatePage(uint addr, struct mem_mapping *mapping) {
 
     // perform mapping
     uint addrStart = PGROUNDDOWN(addr);
+    cprintf("allocatePage: addrStart: %x, physMem: %x\n", addrStart, V2P(mem));
     if (mappages(myproc()->pgdir, (void *)addrStart, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
         kfree(mem);
         cprintf("allocatePage: mappages failed\n");
@@ -189,7 +215,7 @@ int allocatePage(uint addr, struct mem_mapping *mapping) {
 
     // set page contents
     if (mapping->flags & MAP_ANONYMOUS) {
-        cprintf("allocatePage: MAP_ANONYMOUS\n");
+        // cprintf("allocatePage: MAP_ANONYMOUS\n");
         memset(mem, 0, PGSIZE);
     } 
     else {
@@ -206,6 +232,7 @@ int allocatePage(uint addr, struct mem_mapping *mapping) {
         }
         if (fileread(file, mem, n_bytes) < 0){
             kfree(mem);
+            panic("allocatePage: fileread failed\n");
             return 0; // Unable to read from file
         }
     }
@@ -234,6 +261,7 @@ int wunmap(uint addr){
 }
 
 uint wremap(uint oldaddr, int oldsize, int newsize, int flags){
+    cprintf("Wremap\n");
     if(oldaddr % PGSIZE != 0){
         return FAILED;
     }
@@ -260,61 +288,90 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags){
     if(sizeDiff == 0){
         return oldaddr;
     }else if(sizeDiff > 0){
+        int valid = 1;
+        cprintf("A\n");
+        if(i+1 == currproc -> num_mappings) {
+            if(oldaddr + newsize > KERNBASE ){
+                cprintf("B\n");
+                valid = 0;
+            }
+        }
+        else if((currproc -> num_mappings >= 2 && oldaddr + newsize > currproc->mappings[i+1].addr) ){
+            
+             cprintf("C\n");
+            valid = 0;
+        }
+        if(valid) {
+            cprintf("D\n");
+            currproc -> mappings[i].length = newsize;
+            return oldaddr;
+        }
+        cprintf("E\n");
 
         if(flags == 0){
-            currproc -> mappings[i].length = newsize;
-
-            if((currproc -> num_mappings >= 2 && oldaddr + newsize >= currproc->mappings[i+1].addr) || oldaddr + newsize >= KERNBASE){
-                currproc -> mappings[i].length = oldsize;
-                return FAILED;
-            }
-
-            return oldaddr;
- 
+            return FAILED;
         }else{
-
-            currproc -> mappings[i].length = newsize;
-
-            if(((currproc -> num_mappings >= 2 && oldaddr + newsize >= currproc->mappings[i+1].addr ))|| (oldaddr + newsize >= KERNBASE)){
-                currproc -> mappings[i].length = oldsize;
-
-                uint newaddr = getValidAddress(newsize);
-                if (newaddr == FAILED) {
-                    return FAILED; // Unable to find valid address for new mapping
-                }
-
-                struct mem_mapping new_mapping;
-                new_mapping.addr = newaddr;
-                new_mapping.length = newsize;
-                new_mapping.flags = currproc->mappings[i].flags;
-                new_mapping.fd = currproc->mappings[i].fd;
-                new_mapping.valid = 1;
-                new_mapping.n_pages_loaded = currproc->mappings[i].n_pages_loaded;
-
-                currproc -> mappings[i] = new_mapping;
-
-                //unmappages(currproc->pgdir, oldaddr,  oldsize, &(currproc->mappings[i]));
-                deleteMapping(oldaddr);
-
-                return newaddr;
-            }else{
-                return oldaddr;
+            cprintf("F\n");
+            uint newaddr = getValidAddress(newsize);
+            if (newaddr == FAILED) {
+                return FAILED; // Unable to find valid address for new mapping
             }
+
+            struct mem_mapping new_mapping;
+            new_mapping.addr = newaddr;
+            new_mapping.length = newsize;
+            new_mapping.flags = currproc->mappings[i].flags;
+            new_mapping.fd = currproc->mappings[i].fd;
+            new_mapping.valid = 1;
+            new_mapping.n_pages_loaded = currproc->mappings[i].n_pages_loaded;
+
+            cprintf("G\n");
+            //currproc -> mappings[i] = new_mapping;
+            while (oldsize > 0) {
+                uint pageOffset = oldsize - PGSIZE;
+                pte_t *pte = walkpgdir(currproc->pgdir, (void *)(pageOffset + oldaddr), 0);
+
+                if(!(PTE_P & *pte))
+                    goto next;
+
+                mappages(currproc->pgdir, (void *)(newaddr + pageOffset), PGSIZE, PTE_ADDR(*pte), PTE_W | PTE_U);
+                //unmap_page(currproc->pgdir, oldaddr + pageOffset, &(currproc->mappings[i]));
+                *pte = 0;
+                
+                next:
+                oldsize -= PGSIZE;
+            }
+            cprintf("H\n");
+
+            //unmappages(currproc->pgdir, oldaddr,  oldsize, &(currproc->mappings[i]));
+            deleteMapping(oldaddr);
+            cprintf("J\n");
+            insertMapping(&new_mapping);
+            cprintf("K\n");
+
+            return newaddr;
+            
         }
 
     }else{
 
         currproc -> mappings[i].length = newsize;
+        
+        //uint oldEndAddr = oldaddr + oldsize;
 
-        unmappages(currproc->pgdir, oldaddr + newsize, oldsize - newsize, &(currproc->mappings[i]));
+        while(oldsize > newsize){
+            unmap_page(currproc->pgdir, oldaddr + oldsize - PGSIZE, &(currproc->mappings[i]));
+            oldsize = oldsize - PGSIZE;
+        }
+        
         //deleteMapping(oldaddr);
 
         return oldaddr;
-    
     }
 
     return FAILED;
 }
+
 
 int getpgdirinfo(struct pgdirinfo *pdinfo) {
     struct proc *curproc = myproc();
@@ -346,7 +403,6 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
             pdinfo->n_upages++;
             i++;
         }
-
         va += PGSIZE;
     }
 

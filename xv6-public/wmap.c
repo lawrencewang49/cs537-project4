@@ -131,7 +131,7 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
     }
     struct proc *curproc = myproc();
     int found = 0;
-    int i;  //get mapping that we want to remap
+    int i;  // get mapping that we want to remap
     for(i = 0; i < curproc->num_mappings; i++){
         if(curproc->mappings[i].addr == oldaddr){
             found = 1;
@@ -141,12 +141,26 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
     if (!found) {
         return FAILED;
     }
-    // 3 cases, same size, larger size (expand), smaller size (shrink)
+    // 3 cases, same size, smaller size (shrink), larger size (expand)
     int diff = newsize - oldsize;
-    // Case 1: same size --> keep same address
+    // Case 1: same size --> do nothing, keep same address
     if (diff == 0) {
         return oldaddr;
-    } else if (diff > 0) { // Case 2: larger size, find other address to move mapping
+    } else if (diff < 0) { // Case 2: shrinks mapping
+        // set the new size, if shrinking can always stay at current address
+        curproc->mappings[i].length = newsize;
+        int temp = oldsize;
+        // remove pages from memory as a result of shrinking
+        while (temp > newsize) {
+            pte_t *pte = walkpgdir(curproc->pgdir, (void *)oldaddr + temp - PGSIZE, 0);
+            if (pte && (*pte & PTE_P)) {
+                kfree(P2V(PTE_ADDR(*pte)));
+                *pte = 0;
+            }
+            temp -= PGSIZE;
+        }
+        return oldaddr;
+    } else { // Case 3: larger size, find other address to move mapping
         uint end = oldaddr + newsize - 1;
         // If newsize is out of bounds, fail
         if (end >= KERNBASE) {
@@ -211,20 +225,6 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
                 return oldaddr;
             }
         }
-    } else { // Case 3: shrinks mapping
-        // set the new size, if shrinking can always stay at current address
-        curproc->mappings[i].length = newsize;
-        int temp = oldsize;
-        // remove pages from memory as a result of shrinking
-        while (temp > newsize) {
-            pte_t *pte = walkpgdir(curproc->pgdir, (void *)oldaddr + temp - PGSIZE, 0);
-            if (pte && (*pte & PTE_P)) {
-                kfree(P2V(PTE_ADDR(*pte)));
-                *pte = 0;
-            }
-            temp -= PGSIZE;
-        }
-        return oldaddr;
     }
     // didn't find anything to remap
     return FAILED;

@@ -53,16 +53,19 @@ uint wmap(uint addr, int length, int flags, int fd) {
         }
         new_addr = addr;
     } else {
+        // Also iterate, but find next available page instead of failing
         for (int i = 0; i < curproc->num_mappings; i++) {
             uint mapping_end = curproc->mappings[i].addr + curproc->mappings[i].length;
             if ((new_addr >= curproc->mappings[i].addr && new_addr < mapping_end) || (new_addr + length - 1 >= curproc->mappings[i].addr && new_addr + length - 1 < mapping_end) || (curproc->mappings[i].addr >= new_addr && curproc->mappings[i].addr < new_addr + length - 1) || (mapping_end >= new_addr && mapping_end < new_addr + length - 1)) {
                 new_addr = PGROUNDUP(mapping_end);
             }
         }
+        // Check if length is in bounds
         if (new_addr + length - 1 >= KERNBASE) {
             return FAILED;
         }
     }
+    // Make the mapping
     struct mapping new_mapping;
     new_mapping.addr = new_addr;
     new_mapping.length = length;
@@ -70,33 +73,36 @@ uint wmap(uint addr, int length, int flags, int fd) {
     new_mapping.fd = fd;
     new_mapping.num_pages_loaded = 0;
     curproc->mappings[curproc->num_mappings++] = new_mapping;
+    // Sort the mappings to make it easier to perform other operations
     selectionSort(curproc->mappings, curproc->num_mappings);
     return new_mapping.addr;
 }
 
 int wunmap(uint addr) {
-    cprintf("0x%x\n", addr);
     struct proc *curproc = myproc();
     if (addr % PGSIZE != 0) {
         return FAILED;
     }
     int found = 0;
+    // Iterate to find correct page to unmap
     for (int i = 0; i < curproc->num_mappings; i++) {
         if (curproc->mappings[i].addr == addr) {
             uint start = curproc->mappings[i].addr;
             uint end = PGROUNDUP(curproc->mappings[i].addr + curproc->mappings[i].length);
             found = 1;
+            // Check if shared + file backed --> write to file
             uint anon = curproc->mappings[i].flags & MAP_ANONYMOUS;
             uint shared = curproc->mappings[i].flags & MAP_SHARED;
-            // Check for file backing
             if (shared && !anon) {
                 struct file *f = curproc->ofile[curproc->mappings[i].fd];
                 f->off = 0;
+                // copy it over
                 if (filewrite(f, (char *) start, curproc->mappings[i].length) < 0){
                     cprintf("filewrite failed\n");
                     return FAILED; 
                 }
             }
+            // remove pages from physical memory
             for (uint start_addr = start; start_addr < end; start_addr += PGSIZE) {
                 pte_t *pte = walkpgdir(curproc->pgdir, (void *)start_addr, 0);
                 if (pte && (*pte & PTE_P)) {
@@ -104,7 +110,7 @@ int wunmap(uint addr) {
                     *pte = 0;
                 }
             }
-            // Shift all subsequent mappings one position towards the start
+            // Shift all subsequent mappings one position towards the start to remove from virtual memory
             for (int j = i; j < curproc->num_mappings; j++) {
                 curproc->mappings[j] = curproc->mappings[j + 1];
             }
@@ -112,6 +118,7 @@ int wunmap(uint addr) {
             break;
         }
     }
+    // Check if we actually removed a page
     if (!found) {
         return FAILED;
     }
@@ -134,20 +141,25 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
     if (!found) {
         return FAILED;
     }
+    // 3 cases, same size, larger size (expand), smaller size (shrink)
     int diff = newsize - oldsize;
+    // Case 1: same size --> keep same address
     if (diff == 0) {
         return oldaddr;
-    } else if (diff > 0) {
+    } else if (diff > 0) { // Case 2: larger size, find other address to move mapping
         uint end = oldaddr + newsize - 1;
+        // If newsize is out of bounds, fail
         if (end >= KERNBASE) {
             return FAILED;
         }
+        // If in bounds and is the last mapping, simply expand size and return current address
         if (i == curproc->num_mappings - 1) {
             curproc->mappings[i].length = newsize;
             return oldaddr;
         }
-        if (flags == 0) {
-            // checks if there is more than 1 mapping
+        // Checks if we can move mapping
+        if (flags == 0) { // Can't move mapping
+            // checks if there is more than 1 mapping, and if the newsize overlaps with the other mapping
             if (curproc->num_mappings >= 2 && i < curproc->num_mappings - 1) {
                 uint next_map_end = curproc->mappings[i + 1].addr;
                 if (end >= next_map_end) {
@@ -156,9 +168,11 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
             }
             curproc->mappings[i].length = newsize;
             return oldaddr;
-        } else {
+        } else { // Can move mapping
             uint next_map_end = curproc->mappings[i + 1].addr;
+            // We need to move the mapping
             if (end >= next_map_end) {
+                // Find the next available address
                 uint new_addr = 0x60000000;
                 for (int i = 0; i < curproc->num_mappings; i++) {
                     uint mapping_end = curproc->mappings[i].addr + curproc->mappings[i].length;
@@ -166,11 +180,11 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
                         new_addr = PGROUNDUP(mapping_end);
                     }
                 }
+                // Check if in bounds
                 if (new_addr + newsize - 1 >= KERNBASE) {
                     return FAILED;
                 }
-                cprintf("0x%x\n", new_addr);
-                //int offset = 4096;
+                // Allocate at new address
                 struct mapping new_mapping;
                 new_mapping.addr = new_addr;
                 new_mapping.length = newsize;
@@ -178,6 +192,7 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
                 new_mapping.fd = curproc->mappings[i].fd;
                 new_mapping.num_pages_loaded = curproc->mappings[i].num_pages_loaded;
                 curproc->mappings[i] = new_mapping;
+                // remove form old address
                 while (oldsize > 0) {
                     pte_t *pte = walkpgdir(curproc->pgdir, (void *)(oldaddr + oldsize - PGSIZE), 0);
                     if (*pte & PTE_P) {
@@ -187,18 +202,21 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
                     oldsize -= PGSIZE;
                 }
                 wunmap(oldaddr);
+                // sort mappings to make it easier to perform other operations
                 selectionSort(curproc->mappings, curproc->num_mappings);
                 return new_mapping.addr;
             } else {
+                // if it doesn't overlap (can stay at current address), simply expand the mapping size and return old address
                 curproc->mappings[i].length = newsize;
                 return oldaddr;
             }
         }
-    } else {
+    } else { // Case 3: shrinks mapping
+        // set the new size, if shrinking can always stay at current address
         curproc->mappings[i].length = newsize;
         int temp = oldsize;
+        // remove pages from memory as a result of shrinking
         while (temp > newsize) {
-            // wunmap(oldaddr + temp - PGSIZE);
             pte_t *pte = walkpgdir(curproc->pgdir, (void *)oldaddr + temp - PGSIZE, 0);
             if (pte && (*pte & PTE_P)) {
                 kfree(P2V(PTE_ADDR(*pte)));
@@ -206,12 +224,9 @@ uint wremap(uint oldaddr, int oldsize, int newsize, int flags) {
             }
             temp -= PGSIZE;
         }
-        for (int i = 0; i < curproc->num_mappings; i++) {
-            cprintf("%d, 0x%x\n", i, curproc->mappings[i].addr);
-        }
-        cprintf("1\n");
         return oldaddr;
     }
+    // didn't find anything to remap
     return FAILED;
 }
 
@@ -225,21 +240,17 @@ int getpgdirinfo(struct pgdirinfo *pdinfo) {
     uint va = 0;
     int user_allocated_pages = 0;
     pdinfo->n_upages = 0;
-    // cprintf("1\n");
+    // loops through memory to find all user allocated pages within bounds, increments count and stores page size
     while (user_allocated_pages < MAX_UPAGE_INFO && va < KERNBASE) {
         pte = walkpgdir(curr_pgdir, (void*)va, 0);
         if (pte && (*pte & PTE_U)) {
-            // cprintf("0x%x, %x\n", va, (*pte));
-            // cprintf("enters if statement\n");
             pdinfo->n_upages++;
-            // cprintf("user pages %d\n", pdinfo->n_upages);
             pdinfo->va[user_allocated_pages] = va;
             pdinfo->pa[user_allocated_pages] = PTE_ADDR(*pte);
             user_allocated_pages++;
         }
         va += PGSIZE;
     }
-    // cprintf("2\n");
     return SUCCESS;
 }
 
@@ -256,29 +267,36 @@ int getwmapinfo(struct wmapinfo *wminfo) {
 
 int handle_pagefault(uint addr) {
     struct proc *curproc = myproc();
+    // Finds correct page that faults by looping
     for (int i = 0; i < curproc->num_mappings; i++) {
         if (addr >= curproc->mappings[i].addr && addr < curproc->mappings[i].addr + curproc->mappings[i].length) {
+            // Allocate memory w/ kalloc()
             char *mem = kalloc();
             int success;
             if (mem == 0) {
                 return 0;
             }
+            // lazy allocation: load a page into physical memory
             curproc->mappings[i].num_pages_loaded++;
+            // If anon map, simply map pages
             if (curproc->mappings[i].flags & MAP_ANONYMOUS) {
                 success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
                 if (success != 0) {
                     kfree(mem);
                     return 0;
                 } else {
+                    // only allocate page faulted address page
                     memset(mem, 0, PGSIZE);
                     return 1;
                 }
             } else {
                 // file-backed mapping
                 struct file *f = curproc->ofile[curproc->mappings[i].fd];
+                // read contents
                 ilock(f->ip);
                 readi(f->ip, mem, addr - curproc->mappings[i].addr, PGSIZE);
                 iunlock(f->ip);
+                // map contents
                 success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
                 if (success != 0) {
                     kfree(mem);
@@ -289,5 +307,6 @@ int handle_pagefault(uint addr) {
             }
         }
     }
+    // didn't find a page to allocate
     return 0;
 }

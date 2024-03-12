@@ -197,31 +197,56 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
-  // np->num_mappings = curproc->num_mappings;
-  // for (int i = 0; i < curproc->num_mappings; i++) {
-  //   struct mapping cur_map = curproc->mappings[i];
-  //   struct mapping new_map = np->mappings[i];
-  //   new_map = cur_map;
-  //   if (cur_map.addr % PGSIZE != 0) {
-  //     panic("addr not page aligned");
-  //   }
-  //   uint offset = 0;
-  //   while (offset < cur_map.length) {
-  //     uint addr = cur_map.addr + offset;
-  //     if (addr % PGSIZE != 0) {
-  //       panic("addr + offset not page aligned");
-  //     }
-  //     pte_t *pte = walkpgdir(curproc->pgdir, (void *)addr, 0);
-  //     if (!(*pte & PTE_P) || *pte == 0) {
-  //       goto next;
-  //     }
-  //     if (cur_map.flags & MAP_PRIVATE) {
-  //       char* mem = kalloc();
-  //       mappages(np->pgdir, (void *))
-  //     }
-  //   }
-  // }
-  // lcr3(V2P(np->pgdir));
+
+  // Initialize the success flag
+  int success = 1;
+  // Copy the number of mappings
+  np->num_mappings = curproc->num_mappings;
+  for (int i = 0; i < curproc->num_mappings; i++) {
+    // Get current mapping
+    struct mapping cur_map = curproc->mappings[i];
+    if (cur_map.addr % PGSIZE != 0) {
+      success = 0;
+      break;
+    }
+    uint offset = 0;
+    while (offset < cur_map.length) {
+      uint addr = cur_map.addr + offset;
+      // Check for page alignment
+      if (addr % PGSIZE != 0) {
+        success = 0;
+        break;
+      }
+      pte_t *pte = walkpgdir(curproc->pgdir, (void *)addr, 0);
+      // Check if the page is mapped
+      if (*pte && (*pte & PTE_P)) {
+        // if private
+        if (cur_map.flags & MAP_PRIVATE) {
+          char* mem = kalloc();
+          if(mem == 0) {
+            success = 0;
+            break;
+          }
+          if (mappages(np->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0) {
+            success = 0;
+            break;
+          }
+          // page info
+          memmove(mem, (char *)addr, PGSIZE);
+        } else if (cur_map.flags & MAP_SHARED) { // else shared, simply move pages over
+          if (mappages(np->pgdir, (void *)addr, PGSIZE, PTE_ADDR(*pte), PTE_W | PTE_U) < 0) {
+            success = 0;
+            break;
+          }
+        }
+      }
+      offset += PGSIZE;
+    }
+  }
+  if (!success) {
+    return FAILED;
+  }
+  lcr3(V2P(np->pgdir));
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -256,6 +281,11 @@ exit(void)
   struct proc *curproc = myproc();
   struct proc *p;
   int fd;
+
+  // Remove mappings
+  for (int i = 0; i < curproc->num_mappings; i++) {
+    wunmap(curproc->mappings[i].addr);
+  }
 
   if(curproc == initproc)
     panic("init exiting");

@@ -280,7 +280,7 @@ int handle_pagefault(uint addr) {
             curproc->mappings[i].num_pages_loaded++;
             // If anon map, simply map pages
             if (curproc->mappings[i].flags & MAP_ANONYMOUS) {
-                success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+                success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_U | PTE_W);
                 if (success != 0) {
                     kfree(mem);
                     return 0;
@@ -297,7 +297,7 @@ int handle_pagefault(uint addr) {
                 readi(f->ip, mem, addr - curproc->mappings[i].addr, PGSIZE);
                 iunlock(f->ip);
                 // map contents
-                success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+                success = mappages(curproc->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_U | PTE_W);
                 if (success != 0) {
                     kfree(mem);
                     return 0;

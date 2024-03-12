@@ -243,7 +243,12 @@ fork(void)
       // Check if the page is mapped
       if (*pte && (*pte & PTE_P)) {
         // if private
-        if (cur_map.flags & MAP_PRIVATE) {
+        if (cur_map.flags & MAP_SHARED) { // if shared, simply move pages over
+          if (mappages(np->pgdir, (void *)addr, PGSIZE, PTE_ADDR(*pte), PTE_U | PTE_W) < 0) {
+            success = 0;
+            break;
+          }
+        } else { // else private
           char* mem = kalloc();
           if(mem == 0) {
             success = 0;
@@ -255,11 +260,6 @@ fork(void)
           }
           // page info
           memmove(mem, (char *)addr, PGSIZE);
-        } else { // else shared, simply move pages over
-          if (mappages(np->pgdir, (void *)addr, PGSIZE, PTE_ADDR(*pte), PTE_U | PTE_W) < 0) {
-            success = 0;
-            break;
-          }
         }
       }
       offset += PGSIZE;
